@@ -6,7 +6,7 @@ class BaseEmbedding(ABC):
     嵌入模型抽象类
     '''
     @abstractmethod
-    def embed(self,text:str) -> List[float]:
+    def embed_text(self,text:str) -> List[float]:
         '''
         嵌入单个文本
         '''

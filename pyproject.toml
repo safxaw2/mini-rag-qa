@@ -5,13 +5,16 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.11,<3.14"
 dependencies = [
+    "chromadb>=1.5.9",
     "docling==2.76.0",
     "fastapi==0.135.1",
     "markdownify==1.2.2",
+    "numpy==2.4.2",
     "openai==2.29.0",
     "python-docx==1.2.0",
     "python-dotenv==1.2.2",
     "python-multipart==0.0.22",
+    "sentence-transformers==5.3.0",
     "tenacity==9.1.4",
     "torch",
     "torchvision",
