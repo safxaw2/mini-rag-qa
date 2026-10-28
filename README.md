@@ -148,26 +148,3 @@ uv run pytest -q
 ```
 
 部分测试会调用已配置的在线嵌入 API；未设置相应密钥时，真实 API 测试会跳过。PDF 解析测试会生成或更新 `tests/test_pdf.md` 测试产物；如果希望工作区保持干净，测试后请检查 Git 状态。
-
-## 上传 Git 前检查
-
-建议提交源码、测试、配置模板和 `uv.lock`。不要提交：
-
-- `.env`：包含本地密钥或其他私有配置。
-- `.venv/`、`.venv_old/`、`venv/`：本地 Python 虚拟环境。
-- `__pycache__/`、`*.pyc`、`.pytest_cache/`：运行或测试产生的缓存。
-- `data/chroma_db/`：本地 Chroma 向量数据库。
-- `data/uploads/` 下的文件：用户上传文档或本地测试文档，可能包含私有数据。
-- `data/test.*`：本地解析验证文件，不是应用源码。
-- `data/WBGAR25_Chinese_1792778094.896453.pdf`：`data/uploads/` 中的重复大文件，不是自动化测试引用的路径。
-- `tests/test_pdf.md`：PDF 测试生成的文本结果，不是应用运行所需文件。
-
-`tests/test_pdf.py` 当前会读取较大的 `data/WBGAR25_Chinese.pdf`。如需在其他机器复现这个 PDF 解析测试，需要保留该文件并确认有权分发；如果不上传，其他测试仍可运行，但此 PDF 测试需要跳过或改用其他测试文件。
-
-新增的本地缓存、上传和测试文件已由 `.gitignore` 忽略。不过，忽略规则不会自动取消已经被 Git 跟踪的文件。当前仓库已有部分本地数据在 Git 索引中；如果决定将它们从仓库移除，下面的命令只移除索引记录，**不会删除本地文件**：
-
-```powershell
-git rm --cached -- data/test.docx data/test.html data/WBGAR25_Chinese.pdf data/uploads/WBGAR25_Chinese_1792778094.896453.pdf data/uploads/test.md tests/test_pdf.md
-```
-
-若保留 `data/WBGAR25_Chinese.pdf` 作为可复现测试样本，请从上述命令中移除该路径。最后用 `git status --short` 检查将要提交的文件；源码、`frontent/`、测试代码、`.env.example`、`pyproject.toml` 和 `uv.lock` 通常应保留。
