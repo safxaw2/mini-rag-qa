@@ -1,59 +1,111 @@
 import os
+import hashlib
 from pathlib import Path
-import time
+from typing import Optional
+from chromadb.errors import InvalidArgumentError
 from fastapi import APIRouter,UploadFile,File,HTTPException
+from pydantic import BaseModel
+from starlette.concurrency import run_in_threadpool
 
 from ..config import settings
 from src.parsers import ParserFactory,parse_file
-
+from src.embeddings.chroma_store import ChromaVectorStore
+from src.api.deps import get_document_store
 router = APIRouter(prefix='/api', tags=['文件解析'])
 
-def _genreate_file_name(file_name:str) -> str:
-    '''
-    生成文件名
-    '''
-    name,ext=os.path.splitext(file_name)
-    timestamp=time.time()
-    return f'{name}_{timestamp}{ext}'
+class CollectionRequest(BaseModel):
+    collection_name: str
+
+@router.get('/collections')
+async def list_collections():
+    '''列出现有知识库。'''
+    return {"collections":ChromaVectorStore.list_collections(settings.VECTOR_STORE_DIRECTORY)}
+
+@router.post('/collections')
+async def create_collection(body:CollectionRequest):
+    '''创建知识库（已存在时保持不变）。'''
+    collection_name=body.collection_name.strip()
+    if not collection_name:
+        raise HTTPException(status_code=400,detail="知识库名称不能为空")
+    try:
+        ChromaVectorStore(
+            collection_name=collection_name,
+            persist_directory=settings.VECTOR_STORE_DIRECTORY,
+            distance=settings.VECTOR_DISTANCE,
+            search_ef=settings.VECTOR_HNSW_SEARCH_EF,
+            construction_ef=settings.VECTOR_HNSW_CONSTRUCTION_EF,
+            hnsw_m=settings.VECTOR_HNSW_M,
+        )
+    except InvalidArgumentError as e:
+        raise HTTPException(status_code=400,detail=f'知识库名称无效或无法创建：{str(e)}')
+    return {"success":True,"collection_name":collection_name}
 
 @router.post('/upload')
-async def upload_document(file: UploadFile = File(...)):
+async def upload_document(file: UploadFile = File(...),collection_name:Optional[str]=None):
     '''
     上传文件解析文件
     支持的文件类型：pdf,docx,html,md
     '''
 
     ext=os.path.splitext(file.filename or "")[-1].lower()
-    file_bytes=await file.read()
+    if ext not in ParserFactory.supported_extensions():
+        raise HTTPException(status_code=400,detail=f'不支持的文件类型{ext}')
+
+    file_bytes=await file.read(settings.MAX_FILE_SIZE+1)
 
     #判断文件大小
     if len(file_bytes)>settings.MAX_FILE_SIZE:
         size_mb=settings.MAX_FILE_SIZE/1024/1024
         raise HTTPException(status_code=400,detail=f'文件过大。最大允许{size_mb}MB') #10M
-    #判断文件类型
-    if ext not in ParserFactory.supported_extensions(): #判断文件类型
-        raise HTTPException(status_code=400,detail=f'不支持的文件类型{ext}')
-
-    #数据保存
-    upload_dir=_ensure_upload_dir()
-    #文件名：应对文件名重复,对上传的文件统一管理
-    file_name=_genreate_file_name(file.filename)
-    file_path=str(upload_dir/file_name)
-    with open(file_path,'wb') as f:
-        f.write(file_bytes)
 
     try:
+        file_hash=hashlib.sha256(file_bytes).hexdigest()
+        store=None
+        if collection_name:
+            store=await run_in_threadpool(get_document_store,collection_name)
+            existing_chunks=await run_in_threadpool(
+                store.count_file_hash,
+                file_hash,
+                collection_name,
+            )
+            if existing_chunks:
+                return {
+                    'success':True,
+                    'file_name':file.filename,
+                    'stored':True,
+                    'duplicate':True,
+                    'doc_count':existing_chunks,
+                }
+
         #获取解析器
         parser=ParserFactory.get_parser(file.filename)
         #解析文件
-        rs=parser.parse_from_bytes(file_bytes,file.filename)
+        rs=await run_in_threadpool(parser.parse_from_bytes,file_bytes,file.filename)
+        if getattr(rs,'metadata',None) is None:
+            rs.metadata={}
+        rs.metadata['file_hash']=file_hash
+        #保存到向量数据库
+        if store is not None:
+            doc_ids=await run_in_threadpool(
+                store.add_parse_result,
+                rs,
+                name_space=collection_name,
+            )
+        else:
+            doc_ids=[]
+
+        #Persist each successfully parsed upload only once for this request.
+        upload_dir=_ensure_upload_dir()
+        file_name=f'{file_hash}{ext}'
+        file_path=upload_dir/file_name
+        if not file_path.exists():
+            await run_in_threadpool(file_path.write_bytes,file_bytes)
+
         return {
-            'msg':'处理成功',
+            'success':True,
             'file_name':rs.file_name,
-            'total_pages':rs.total_pages,
-            'total_chunks':rs.total_chunks,
-            'table_count':rs.table_count,
-            'chunks':rs.chunks,
+            'stored':store is not None,
+            'doc_count':len(doc_ids) if store is not None else rs.total_chunks,
         }
     except Exception as e:
         raise HTTPException(status_code=500,detail=f'文件解析失败：{str(e)}')

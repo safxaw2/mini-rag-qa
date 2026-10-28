@@ -1,4 +1,4 @@
-"""ChromaStore 测试。
+"""ChromaVectorStore 测试。
 
 每个用例使用 tmp_path 下的临时持久化目录和随机集合名，互不影响；
 向量为手工构造的简单向量，不依赖嵌入模型，结果可重复。
@@ -24,7 +24,7 @@ try:
 except (AttributeError, OSError):
     pass
 
-from src.embeddings.chroma_store import ChromaStore
+from src.embeddings.chroma_store import ChromaVectorStore
 from src.embeddings.vector_store import BaseVectorStore, Document, SearchResult
 
 
@@ -84,8 +84,8 @@ def collection_name() -> str:
 
 
 @pytest.fixture()
-def store(persist_dir, collection_name) -> ChromaStore:
-    return ChromaStore(collection_name=collection_name, persist_directory=persist_dir)
+def store(persist_dir, collection_name) -> ChromaVectorStore:
+    return ChromaVectorStore(collection_name=collection_name, persist_directory=persist_dir)
 
 
 # ---------------------------------------------------------------- 初始化
@@ -94,14 +94,14 @@ class TestInit:
     """初始化与集合管理"""
 
     def test_implements_base_vector_store(self, store):
-        print(f"\n  抽象方法：{ChromaStore.__abstractmethods__}")
+        print(f"\n  抽象方法：{ChromaVectorStore.__abstractmethods__}")
         print(f"  是 BaseVectorStore 实例：{isinstance(store, BaseVectorStore)}")
         assert isinstance(store, BaseVectorStore)
         # 基类抽象方法必须全部实现，否则无法实例化
-        assert ChromaStore.__abstractmethods__ == frozenset()
+        assert ChromaVectorStore.__abstractmethods__ == frozenset()
 
     def test_defaults(self, persist_dir):
-        store = ChromaStore(persist_directory=persist_dir)
+        store = ChromaVectorStore(persist_directory=persist_dir)
 
         stats = store.get_collection_stats()
         print(f"\n  默认统计信息：{stats}")
@@ -111,7 +111,7 @@ class TestInit:
 
     def test_custom_collection_name_and_distance(self, persist_dir):
         name = _unique_collection_name()
-        store = ChromaStore(
+        store = ChromaVectorStore(
             collection_name=name,
             persist_directory=persist_dir,
             distance="l2",
@@ -122,15 +122,20 @@ class TestInit:
         print(f"  集合元数据：{store.collection.metadata}")
         assert stats["name"] == name
         assert stats["distance"] == "l2"
-        assert store.collection.metadata == {"hnsw:space": "l2"}
+        assert store.collection.metadata == {
+            "hnsw:space": "l2",
+            "hnsw:search_ef": 100,
+            "hnsw:construction_ef": 100,
+            "hnsw:M": 16,
+        }
 
     def test_reopen_keeps_existing_collection(self, persist_dir, collection_name):
-        first = ChromaStore(collection_name=collection_name, persist_directory=persist_dir)
+        first = ChromaVectorStore(collection_name=collection_name, persist_directory=persist_dir)
         added = first.add_documents(_make_documents(), _make_embeddings())
         print(f"\n  首次写入 {len(added)} 条：{added}")
 
         # 同一目录、同一集合名重新打开，数据应保留而不是被重建
-        second = ChromaStore(collection_name=collection_name, persist_directory=persist_dir)
+        second = ChromaVectorStore(collection_name=collection_name, persist_directory=persist_dir)
         ids = _sample_ids(second)
         print(f"  重新打开后 count={second.get_collection_stats()['count']}")
         print(f"  重新打开后检索顺序：{ids}")

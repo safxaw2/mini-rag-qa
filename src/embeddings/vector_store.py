@@ -34,18 +34,19 @@ class BaseVectorStore(ABC):
     pass
 
   @abstractmethod
-  def search(self, 
+  def search(self,
              query_embedding:List[float],
              top_k: int = 5,
-             filter:Dict[str, Any] = None,
+             filter:Optional[Dict[str, Any]] = None,
              ) -> List[SearchResult]:
     '''
-    搜索文档
-    参数：
-      query: 查询字符串
-      k: 返回的文档数量
-      返回：
-      搜索结果列表
+    按向量检索文档
+    ARGS:
+      query_embedding: 查询向量
+      top_k: 返回结果数上限
+      filter: 元数据过滤条件（Chroma where 语法），None 表示不过滤
+    RETURN:
+      按距离升序的 SearchResult 列表；score 为距离（cosine 下越小越相似）
     '''
     pass
 

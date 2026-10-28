@@ -1,10 +1,26 @@
 
 import uuid
+from functools import lru_cache
+import threading
 from typing import List, Dict,Any
 
 import chromadb
 
 from src.embeddings.vector_store import BaseVectorStore,Document,SearchResult
+
+
+_client_cache_lock=threading.Lock()
+
+
+@lru_cache(maxsize=8)
+def _persistent_client(persist_directory: str):
+    return chromadb.PersistentClient(path=persist_directory)
+
+
+def _get_persistent_client(persist_directory: str):
+    with _client_cache_lock:
+        return _persistent_client(persist_directory)
+
 
 class ChromaVectorStore(BaseVectorStore):
     '''
@@ -14,15 +30,29 @@ class ChromaVectorStore(BaseVectorStore):
             self,
             collection_name:str='rag_documents',
             persist_directory:str='./data/chroma_db',
-            distance:str='cosine'
+            distance:str='cosine',
+            search_ef:int=100,
+            construction_ef:int=100,
+            hnsw_m:int=16,
     ):
         self.collection_name=collection_name
         self.distance=distance
-        #创建客户端
-        self.client=chromadb.PersistentClient(path=persist_directory)
+        self.persist_directory=persist_directory
+        self.collection_metadata={
+            'hnsw:space':distance,
+            'hnsw:search_ef':search_ef,
+            'hnsw:construction_ef':construction_ef,
+            'hnsw:M':hnsw_m,
+        }
+        self.client=_get_persistent_client(persist_directory)
 
         #获取或创建集合
-        self.collection=self.client.get_or_create_collection(name=collection_name,metadata={'hnsw:space':distance})
+        self.collection=self.client.get_or_create_collection(name=collection_name,metadata=self.collection_metadata)
+
+    @staticmethod
+    def list_collections(persist_directory: str = './data/chroma_db') -> List[str]:
+        client=_get_persistent_client(persist_directory)
+        return sorted(collection.name for collection in client.list_collections())
 
     def add_documents(
             self,
@@ -34,6 +64,8 @@ class ChromaVectorStore(BaseVectorStore):
         '''
         if not documents:
             return []
+        if len(documents) != len(embeddings):
+            raise ValueError("documents and embeddings must have the same length")
 
         ids=[]
         metadata=[]
@@ -44,13 +76,26 @@ class ChromaVectorStore(BaseVectorStore):
             metadata.append(doc.metadata)
             texts.append(doc.content)
 
-        self.collection.add(
+        self.collection.upsert(
             ids=ids,
             documents=texts,
             metadatas=metadata,
             embeddings=embeddings
         )
         return ids
+
+    def count_by_metadata(
+        self,
+        metadata_filter: Dict[str, Any],
+        namespace: str = None,
+    ) -> int:
+        results=self.collection.get(where=metadata_filter,include=['metadatas'])
+        if namespace is None:
+            return len(results['ids'])
+        return sum(
+            metadata.get('namespace') == namespace
+            for metadata in results['metadatas']
+        )
 
     def search(self, query_embedding, top_k = 5, filter = None):
         results=self.collection.query(
@@ -79,7 +124,7 @@ class ChromaVectorStore(BaseVectorStore):
         清空所有数据
         '''
         self.client.delete_collection(self.collection_name)
-        self.collection=self.client.create_collection(name=self.collection_name,metadata={'hnsw:space':self.distance})
+        self.collection=self.client.create_collection(name=self.collection_name,metadata=self.collection_metadata)
         return True
 
     def get_collection_stats(self) -> Dict[str,Any]:

@@ -1,0 +1,687 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f5f7f4" />
+    <title>知问 · RAG 知识助手</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <style>
+      :root {
+        font-family: Inter, "PingFang SC", "Microsoft YaHei", sans-serif;
+        color: #202b28;
+        background: #f5f7f4;
+        font-synthesis: none;
+        text-rendering: optimizeLegibility;
+        --green: #187b62;
+        --green-dark: #11634e;
+        --muted: #78837e;
+        --line: #e6ebe7;
+        --surface: #fff;
+      }
+
+      * { box-sizing: border-box; }
+      body { margin: 0; min-width: 320px; min-height: 100vh; }
+      button, input, textarea { font: inherit; }
+      button { cursor: pointer; }
+      button:disabled { cursor: not-allowed; opacity: .58; }
+      .shell { display: flex; min-height: 100vh; }
+      .sidebar {
+        width: 254px;
+        flex: 0 0 254px;
+        display: flex;
+        flex-direction: column;
+        padding: 27px 18px 20px;
+        background: #fff;
+        border-right: 1px solid var(--line);
+      }
+      .brand { display: flex; align-items: center; gap: 11px; padding: 0 10px 31px; }
+      .brand-mark {
+        display: grid;
+        width: 38px;
+        height: 38px;
+        place-items: center;
+        border-radius: 12px;
+        color: #fff;
+        background: var(--green);
+        font-size: 19px;
+        font-weight: 700;
+      }
+      .brand-name { font-size: 17px; font-weight: 700; letter-spacing: .02em; }
+      .brand-caption { margin-top: 3px; color: var(--muted); font-size: 11px; }
+      .nav-label { padding: 0 11px 9px; color: #9aa39f; font-size: 11px; letter-spacing: .1em; }
+      .nav-button {
+        display: flex;
+        width: 100%;
+        align-items: center;
+        gap: 12px;
+        padding: 11px 12px;
+        border: 0;
+        border-radius: 9px;
+        color: #62706a;
+        background: transparent;
+        text-align: left;
+        font-size: 13px;
+      }
+      .nav-button:hover { background: #f5f8f6; }
+      .nav-button.active { color: var(--green-dark); background: #eaf5f0; font-weight: 650; }
+      .nav-icon { width: 19px; text-align: center; font-size: 16px; }
+      .sidebar-bottom { margin-top: auto; }
+      .collection-card { padding: 14px; border: 1px solid var(--line); border-radius: 11px; background: #fbfcfb; }
+      .field-label { display: block; margin-bottom: 8px; color: #58655f; font-size: 12px; font-weight: 600; }
+      .text-input {
+        width: 100%;
+        min-height: 39px;
+        padding: 9px 11px;
+        border: 1px solid #dfe6e1;
+        border-radius: 8px;
+        outline: none;
+        color: #26332e;
+        background: #fff;
+        font-size: 13px;
+        transition: border-color .15s, box-shadow .15s;
+      }
+      .text-input:focus, .select-input:focus, .composer textarea:focus { border-color: #83b8a4; box-shadow: 0 0 0 3px #187b6215; }
+      .select-input { width: 100%; min-height: 39px; padding: 8px 30px 8px 10px; border: 1px solid #dfe6e1; border-radius: 8px; outline: none; color: #26332e; background: #fff; font-size: 12px; }
+      .create-collection { display: flex; gap: 7px; margin-top: 9px; }
+      .create-collection .text-input { min-width: 0; min-height: 35px; padding: 7px 8px; font-size: 11px; }
+      .create-button { flex: 0 0 auto; padding: 0 9px; border: 0; border-radius: 7px; color: #fff; background: var(--green); font-size: 11px; }
+      .create-button:disabled { cursor: not-allowed; opacity: .58; }
+      .collection-mobile { display: none; }
+      .health { display: flex; align-items: center; gap: 8px; padding: 17px 10px 0; color: var(--muted); font-size: 11px; }
+      .health-dot { width: 7px; height: 7px; border-radius: 50%; background: #d3a342; }
+      .health-dot.ok { background: #43a77e; }
+      .health-dot.error { background: #d56f65; }
+      .main { display: flex; flex: 1; min-width: 0; flex-direction: column; }
+      .topbar {
+        position: relative;
+        display: flex;
+        min-height: 70px;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 40px;
+        border-bottom: 1px solid var(--line);
+        background: rgba(255,255,255,.72);
+      }
+      .page-title { font-size: 15px; font-weight: 650; }
+      .top-caption { margin-top: 4px; color: var(--muted); font-size: 11px; }
+      .top-collection { color: #66736d; font-size: 12px; }
+      .collection-mobile-wrap { display: none; }
+      .content { width: min(940px, 100%); margin: 0 auto; padding: 42px 38px 35px; }
+      .welcome { margin: 2px 0 26px; }
+      .eyebrow { color: var(--green); font-size: 11px; font-weight: 700; letter-spacing: .13em; }
+      h1 { margin: 9px 0 8px; font-size: clamp(24px, 3vw, 31px); letter-spacing: -.035em; }
+      .intro { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.7; }
+      .suggestions { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 20px; }
+      .suggestion {
+        padding: 9px 12px;
+        border: 1px solid #e1e9e3;
+        border-radius: 20px;
+        color: #506159;
+        background: #fff;
+        font-size: 12px;
+        transition: .15s;
+      }
+      .suggestion:hover { border-color: #a7ccb9; color: var(--green-dark); }
+      .conversation { display: flex; flex-direction: column; gap: 20px; margin: 28px 0; }
+      .message { display: flex; align-items: flex-start; gap: 11px; }
+      .message.user { flex-direction: row-reverse; }
+      .avatar {
+        display: grid;
+        width: 31px;
+        height: 31px;
+        flex: 0 0 31px;
+        place-items: center;
+        border-radius: 10px;
+        color: var(--green-dark);
+        background: #e6f2ec;
+        font-size: 13px;
+        font-weight: 700;
+      }
+      .user .avatar { color: #626b66; background: #e9ecea; }
+      .bubble { max-width: min(710px, calc(100% - 44px)); }
+      .user .bubble { text-align: right; }
+      .message-label { margin: 2px 0 7px; color: #7a8580; font-size: 11px; }
+      .message-text {
+        padding: 13px 15px;
+        border: 1px solid var(--line);
+        border-radius: 4px 13px 13px;
+        color: #35423c;
+        background: #fff;
+        font-size: 13px;
+        line-height: 1.8;
+        text-align: left;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+      .user .message-text { border-color: #dcece3; border-radius: 13px 4px 13px 13px; background: #edf6f0; }
+      .message-error { color: #a33e36; background: #fff6f5; border-color: #f1d8d5; }
+      .answer-meta { display: flex; flex-wrap: wrap; gap: 13px; margin: 9px 2px 0; color: #89938e; font-size: 10px; }
+      .sources { margin-top: 16px; padding-top: 13px; border-top: 1px solid #edf0ed; text-align: left; }
+      .sources-title { margin-bottom: 8px; color: #64736b; font-size: 11px; font-weight: 650; }
+      .source { margin-top: 7px; padding: 9px 10px; border-radius: 7px; background: #f7f9f7; }
+      .source-head { display: flex; justify-content: space-between; gap: 10px; color: #7a8780; font-size: 10px; }
+      .source-text { margin-top: 5px; color: #53615a; font-size: 11px; line-height: 1.65; white-space: pre-wrap; }
+      .composer {
+        position: sticky;
+        bottom: 0;
+        padding: 12px 0 0;
+        background: linear-gradient(0deg, #f5f7f4 82%, #f5f7f400);
+      }
+      .composer-box { padding: 12px; border: 1px solid #dfe7e1; border-radius: 13px; background: #fff; box-shadow: 0 7px 22px #344c3e0a; }
+      .composer textarea { display: block; width: 100%; min-height: 70px; resize: vertical; border: 1px solid transparent; border-radius: 7px; padding: 8px; outline: none; color: #26332e; font-size: 13px; line-height: 1.6; }
+      .composer textarea::placeholder { color: #a4ada8; }
+      .composer-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 5px 3px 1px; }
+      .helper { color: #929d97; font-size: 10px; }
+      .primary-button {
+        display: inline-flex;
+        min-height: 36px;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+        padding: 0 15px;
+        border: 0;
+        border-radius: 8px;
+        color: white;
+        background: var(--green);
+        font-size: 12px;
+        font-weight: 650;
+      }
+      .primary-button:hover:not(:disabled) { background: var(--green-dark); }
+      .document-content { width: min(870px, 100%); }
+      .document-card { margin-top: 23px; padding: 22px; border: 1px solid var(--line); border-radius: 13px; background: #fff; }
+      .card-heading { margin: 0 0 6px; font-size: 15px; }
+      .card-copy { margin: 0 0 18px; color: var(--muted); font-size: 12px; line-height: 1.7; }
+      .dropzone {
+        display: flex;
+        min-height: 170px;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 22px;
+        border: 1px dashed #c9d8cd;
+        border-radius: 10px;
+        background: #fbfdfb;
+        text-align: center;
+        cursor: pointer;
+      }
+      .dropzone:hover { border-color: #80b49a; background: #f7fbf8; }
+      .upload-icon { margin-bottom: 10px; color: var(--green); font-size: 25px; }
+      .drop-title { font-size: 13px; font-weight: 650; }
+      .drop-copy { margin-top: 6px; color: var(--muted); font-size: 11px; }
+      .file-name { margin-top: 9px; color: var(--green-dark); font-size: 12px; font-weight: 600; }
+      .file-input { display: none; }
+      .upload-options { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 15px; margin-top: 16px; }
+      .checkbox-label { display: flex; align-items: center; gap: 8px; color: #627069; font-size: 12px; }
+      .checkbox-label input { accent-color: var(--green); }
+      .formats { margin-top: 14px; color: #929b96; font-size: 10px; }
+      .divider { display: flex; align-items: center; gap: 13px; margin: 18px 0; color: #a0a9a4; font-size: 10px; }
+      .divider::before, .divider::after { height: 1px; flex: 1; background: var(--line); content: ""; }
+      .path-row { display: flex; gap: 9px; }
+      .path-row .text-input { flex: 1; }
+      .result-card { margin-top: 18px; padding: 15px; border: 1px solid #dfeae2; border-radius: 10px; background: #f9fcf9; }
+      .result-title { color: var(--green-dark); font-size: 12px; font-weight: 700; }
+      .result-stats { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 9px; color: #718078; font-size: 11px; }
+      .chunk { margin-top: 10px; padding: 10px; border-radius: 7px; background: #fff; }
+      .chunk-title { color: #89958e; font-size: 10px; }
+      .chunk-text { margin-top: 5px; color: #4e5e55; font-size: 11px; line-height: 1.7; white-space: pre-wrap; }
+      .toast { position: fixed; right: 24px; bottom: 24px; z-index: 3; max-width: min(420px, calc(100vw - 32px)); padding: 12px 16px; border: 1px solid #d9e8dc; border-radius: 9px; color: #285d46; background: #fff; box-shadow: 0 10px 35px #203c2e1a; font-size: 12px; }
+      .toast.error { color: #9c3934; border-color: #f0d7d4; }
+      .spinner { width: 13px; height: 13px; border: 2px solid #ffffff70; border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      @media (max-width: 760px) {
+        .sidebar { width: 64px; flex-basis: 64px; align-items: center; padding: 17px 8px; }
+        .brand { padding: 0 0 24px; }
+        .brand-copy, .nav-label, .nav-text, .sidebar-bottom { display: none; }
+        .nav-button { width: 46px; height: 43px; justify-content: center; padding: 8px; }
+        .nav-icon { font-size: 18px; }
+        .topbar { min-height: 61px; padding: 0 18px; }
+        .content { padding: 30px 18px 24px; }
+        .top-collection { max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .collection-mobile-wrap { position: relative; display: block; }
+        .collection-mobile { display: block; width: min(34vw, 170px); min-height: 34px; padding: 6px 8px; }
+        .mobile-create-collection { position: absolute; top: calc(100% + 7px); right: 0; z-index: 2; width: min(300px, calc(100vw - 85px)); padding: 8px; border: 1px solid var(--line); background: #fff; box-shadow: 0 8px 22px #203c2e18; }
+        .collection-desktop { display: none; }
+      }
+      @media (max-width: 460px) {
+        .sidebar { width: 54px; flex-basis: 54px; }
+        .brand-mark { width: 34px; height: 34px; }
+        .topbar { padding: 0 12px; }
+        .content { padding-right: 13px; padding-left: 13px; }
+        .document-card { padding: 16px; }
+        .helper { max-width: 58%; line-height: 1.5; }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <div class="shell">
+        <aside class="sidebar">
+          <div class="brand">
+            <div class="brand-mark">知</div>
+            <div class="brand-copy">
+              <div class="brand-name">知问</div>
+              <div class="brand-caption">RAG 知识助手</div>
+            </div>
+          </div>
+          <div class="nav-label">工作空间</div>
+          <button class="nav-button" :class="{ active: activePage === 'chat' }" @click="activePage = 'chat'">
+            <span class="nav-icon">✳</span><span class="nav-text">智能问答</span>
+          </button>
+          <button class="nav-button" :class="{ active: activePage === 'documents' }" @click="activePage = 'documents'">
+            <span class="nav-icon">▤</span><span class="nav-text">文档管理</span>
+          </button>
+          <div class="sidebar-bottom">
+            <div class="collection-card">
+              <label class="field-label" for="collection">知识库名称</label>
+              <select id="collection" class="select-input" :value="collectionName" @change="handleCollectionChange">
+                <option v-for="name in collections" :key="name" :value="name">{{ name }}</option>
+                <option value="__create_collection__">＋ 新建知识库</option>
+              </select>
+              <div v-if="creatingCollection" class="create-collection">
+                <input v-model.trim="newCollectionName" class="text-input" maxlength="120" placeholder="输入知识库名称" @keydown.enter.prevent="createCollection" />
+                <button class="create-button" :disabled="creatingCollectionLoading || !newCollectionName.trim()" @click="createCollection">
+                  {{ creatingCollectionLoading ? '创建中' : '创建' }}
+                </button>
+              </div>
+            </div>
+            <div class="health">
+              <span class="health-dot" :class="healthState"></span>
+              <span>{{ healthLabel }}</span>
+            </div>
+          </div>
+        </aside>
+
+        <main class="main">
+          <header class="topbar">
+            <div>
+              <div class="page-title">{{ activePage === 'chat' ? '智能问答' : '文档管理' }}</div>
+              <div class="top-caption">{{ activePage === 'chat' ? '基于你的知识库，获取有依据的回答' : '上传并解析文档，构建专属知识库' }}</div>
+            </div>
+            <div class="top-collection">
+              <span class="collection-desktop">当前知识库：{{ collectionName || '未命名' }}</span>
+              <div class="collection-mobile-wrap">
+                <select class="select-input collection-mobile" :value="collectionName" aria-label="选择知识库" @change="handleCollectionChange">
+                  <option v-for="name in collections" :key="name" :value="name">{{ name }}</option>
+                  <option value="__create_collection__">＋ 新建知识库</option>
+                </select>
+                <div v-if="creatingCollection" class="create-collection mobile-create-collection">
+                  <input v-model.trim="newCollectionName" class="text-input" maxlength="120" placeholder="输入知识库名称" @keydown.enter.prevent="createCollection" />
+                  <button class="create-button" :disabled="creatingCollectionLoading || !newCollectionName.trim()" @click="createCollection">
+                    {{ creatingCollectionLoading ? '创建中' : '创建' }}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </header>
+
+          <section v-if="activePage === 'chat'" class="content">
+            <div class="welcome">
+              <div class="eyebrow">YOUR KNOWLEDGE, IN CONVERSATION</div>
+              <h1>有什么可以帮你？</h1>
+              <p class="intro">向你的知识库提问，答案将附上相关文档片段，方便你核对来源。</p>
+              <div v-if="messages.length === 0" class="suggestions">
+                <button class="suggestion" @click="useSuggestion('帮我总结知识库中的主要内容')">帮我总结知识库中的主要内容</button>
+                <button class="suggestion" @click="useSuggestion('有哪些值得关注的关键数据？')">有哪些值得关注的关键数据？</button>
+                <button class="suggestion" @click="useSuggestion('请根据文档解释一个核心概念')">请根据文档解释一个核心概念</button>
+              </div>
+            </div>
+
+            <div class="conversation">
+              <article v-for="message in messages" :key="message.id" class="message" :class="message.role">
+                <div class="avatar">{{ message.role === 'user' ? '我' : '知' }}</div>
+                <div class="bubble">
+                  <div class="message-label">{{ message.role === 'user' ? '你' : '知识助手' }}</div>
+                  <div class="message-text" :class="{ 'message-error': message.error }">
+                    {{ message.pending ? '正在检索知识库并生成回答…' : message.text }}
+                  </div>
+                  <template v-if="message.role === 'assistant' && !message.pending && !message.error">
+                    <div class="answer-meta">
+                      <span v-if="message.tokens !== undefined">Token {{ message.tokens }}</span>
+                      <span v-if="message.duration !== undefined">耗时 {{ message.duration }} ms</span>
+                    </div>
+                    <div v-if="message.sources && message.sources.length" class="sources">
+                      <div class="sources-title">参考来源 · {{ message.sources.length }}</div>
+                      <div v-for="(source, index) in message.sources" :key="source.id || index" class="source">
+                        <div class="source-head">
+                          <span>{{ source.id || `来源 ${index + 1}` }}</span>
+                          <span v-if="source.score !== null && source.score !== undefined">距离 {{ formatScore(source.score) }}</span>
+                        </div>
+                        <div class="source-text">{{ source.text }}</div>
+                      </div>
+                    </div>
+                  </template>
+                </div>
+              </article>
+            </div>
+
+            <form class="composer" @submit.prevent="ask">
+              <div class="composer-box">
+                <textarea v-model="query" :disabled="chatLoading" placeholder="输入你的问题…（Enter 发送，Shift + Enter 换行）" @keydown.enter.exact.prevent="ask"></textarea>
+                <div class="composer-footer">
+                  <span class="helper">回答由知识库检索生成，请结合来源内容核对</span>
+                  <button class="primary-button" type="submit" :disabled="chatLoading || !query.trim() || !collectionName.trim()">
+                    <span v-if="chatLoading" class="spinner"></span>
+                    <span>{{ chatLoading ? '思考中' : '发送' }}</span>
+                    <span v-if="!chatLoading">↗</span>
+                  </button>
+                </div>
+              </div>
+            </form>
+          </section>
+
+          <section v-else class="content document-content">
+            <div class="welcome">
+              <div class="eyebrow">BUILD YOUR KNOWLEDGE BASE</div>
+              <h1>管理知识文档</h1>
+              <p class="intro">上传文件并保存到知识库，随后即可在智能问答中检索内容。</p>
+            </div>
+
+            <div class="document-card">
+              <h2 class="card-heading">上传文档</h2>
+              <p class="card-copy">选择一个文件进行解析。保存到知识库后，问答时即可检索文档内容。</p>
+              <label class="dropzone" for="file-picker" @dragover.prevent @drop.prevent="dropFile">
+                <span class="upload-icon">↑</span>
+                <span class="drop-title">{{ selectedFile ? '已选择文件' : '点击选择或拖入文件' }}</span>
+                <span class="drop-copy">支持 PDF、DOCX、HTML、Markdown，单个文件最大 50 MB</span>
+                <span v-if="selectedFile" class="file-name">{{ selectedFile.name }}</span>
+              </label>
+              <input id="file-picker" class="file-input" type="file" :accept="acceptedFormats" @change="selectFile" />
+              <div class="upload-options">
+                <label class="checkbox-label">
+                  <input v-model="storeDocument" type="checkbox" />
+                  解析后保存到「{{ collectionName || '当前知识库' }}」
+                </label>
+                <button class="primary-button" :disabled="uploading || !selectedFile || (storeDocument && !collectionName.trim())" @click="uploadDocument">
+                  <span v-if="uploading" class="spinner"></span>
+                  {{ uploading ? '正在处理' : '上传并解析' }}
+                </button>
+              </div>
+              <div class="formats">支持格式：{{ formats.length ? formats.join(' · ') : '正在读取…' }}</div>
+
+              <div class="divider">或解析服务器上已有的文件</div>
+              <form class="path-row" @submit.prevent="parsePath">
+                <input v-model.trim="filePath" class="text-input" placeholder="输入服务器文件路径或 data/uploads 下的文件名" />
+                <button class="primary-button" type="submit" :disabled="parsingPath || !filePath">
+                  <span v-if="parsingPath" class="spinner"></span>
+                  {{ parsingPath ? '解析中' : '解析文件' }}
+                </button>
+              </form>
+
+              <div v-if="documentResult" class="result-card">
+                <div class="result-title">{{ documentResult.title }}</div>
+                <div v-if="documentResult.stats" class="result-stats">
+                  <span>文件：{{ documentResult.stats.fileName }}</span>
+                  <span v-if="documentResult.stats.pages !== undefined">页数：{{ documentResult.stats.pages }}</span>
+                  <span v-if="documentResult.stats.chunks !== undefined">文本片段：{{ documentResult.stats.chunks }}</span>
+                  <span v-if="documentResult.stats.tables !== undefined">表格：{{ documentResult.stats.tables }}</span>
+                  <span v-if="documentResult.stats.stored !== undefined">{{ documentResult.stats.stored ? '已保存到知识库' : '仅解析，未保存' }}</span>
+                </div>
+                <div v-for="(chunk, index) in documentResult.chunks" :key="chunk.index ?? index" class="chunk">
+                  <div class="chunk-title">片段 {{ chunk.index ?? index + 1 }}<span v-if="chunk.type"> · {{ chunk.type }}</span><span v-if="chunk.page"> · 第 {{ chunk.page }} 页</span></div>
+                  <div class="chunk-text">{{ chunk.content }}</div>
+                </div>
+              </div>
+
+            </div>
+          </section>
+        </main>
+      </div>
+      <div v-if="toast" class="toast" :class="{ error: toast.type === 'error' }" role="status">{{ toast.message }}</div>
+    </div>
+
+    <script>
+      const { createApp, ref, computed, onMounted } = Vue;
+
+      createApp({
+        setup() {
+          const activePage = ref("chat");
+          const collectionName = ref(localStorage.getItem("rag-collection") || "rag_documents");
+          const collections = ref([collectionName.value]);
+          const creatingCollection = ref(false);
+          const newCollectionName = ref("");
+          const creatingCollectionLoading = ref(false);
+          const query = ref("");
+          const messages = ref([]);
+          const chatLoading = ref(false);
+          const healthState = ref("");
+          const healthLabel = ref("正在检查服务");
+          const formats = ref([]);
+          const selectedFile = ref(null);
+          const storeDocument = ref(true);
+          const uploading = ref(false);
+          const filePath = ref("");
+          const parsingPath = ref(false);
+          const documentResult = ref(null);
+          const toast = ref(null);
+          let toastTimer;
+          const acceptedFormats = computed(() => formats.value.join(","));
+
+          function notify(message, type = "success") {
+            toast.value = { message, type };
+            window.clearTimeout(toastTimer);
+            toastTimer = window.setTimeout(() => { toast.value = null; }, 2600);
+          }
+
+          async function loadCollections() {
+            try {
+              const result = await request("/api/collections");
+              const available = result.collections || [];
+              if (!available.includes(collectionName.value)) available.unshift(collectionName.value);
+              collections.value = available;
+            } catch (error) {
+              notify(`读取知识库列表失败：${error.message}`, "error");
+            }
+          }
+
+          function handleCollectionChange(event) {
+            const selected = event.target.value;
+            if (selected === "__create_collection__") {
+              creatingCollection.value = true;
+              newCollectionName.value = "";
+              event.target.value = collectionName.value;
+              return;
+            }
+            if (selected === collectionName.value) return;
+            collectionName.value = selected;
+            localStorage.setItem("rag-collection", selected);
+            notify(`已切换到知识库「${selected}」`);
+          }
+
+          async function createCollection() {
+            const name = newCollectionName.value.trim();
+            if (!name || creatingCollectionLoading.value) return;
+            creatingCollectionLoading.value = true;
+            try {
+              const result = await request("/api/collections", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ collection_name: name }),
+              });
+              if (!collections.value.includes(result.collection_name)) {
+                collections.value.push(result.collection_name);
+                collections.value.sort((left, right) => left.localeCompare(right));
+              }
+              collectionName.value = result.collection_name;
+              localStorage.setItem("rag-collection", result.collection_name);
+              creatingCollection.value = false;
+              notify(`已切换到知识库「${result.collection_name}」`);
+            } catch (error) {
+              notify(`创建知识库失败：${error.message}`, "error");
+            } finally {
+              creatingCollectionLoading.value = false;
+            }
+          }
+
+          async function request(url, options = {}) {
+            const response = await fetch(url, options);
+            const contentType = response.headers.get("content-type") || "";
+            const body = contentType.includes("application/json")
+              ? await response.json()
+              : await response.text();
+            if (!response.ok) {
+              const detail = body && typeof body === "object" ? body.detail || body.message : body;
+              throw new Error(detail || `请求失败（HTTP ${response.status}）`);
+            }
+            return body;
+          }
+
+          async function checkHealth() {
+            try {
+              await request("/api/health/");
+              healthState.value = "ok";
+              healthLabel.value = "API 服务正常";
+            } catch (error) {
+              healthState.value = "error";
+              healthLabel.value = "API 服务不可用";
+            }
+          }
+
+          async function loadFormats() {
+            try {
+              const response = await request("/api/supported-extensions");
+              formats.value = response.formats || [];
+            } catch (error) {
+              notify(`读取支持格式失败：${error.message}`, "error");
+            }
+          }
+
+          function useSuggestion(text) {
+            query.value = text;
+            ask();
+          }
+
+          async function ask() {
+            const question = query.value.trim();
+            if (!question || chatLoading.value) return;
+            if (!collectionName.value.trim()) {
+              notify("请先填写知识库名称。", "error");
+              return;
+            }
+            localStorage.setItem("rag-collection", collectionName.value.trim());
+            query.value = "";
+            messages.value.push({ id: crypto.randomUUID(), role: "user", text: question });
+            const answer = { id: crypto.randomUUID(), role: "assistant", text: "", pending: true };
+            messages.value.push(answer);
+            chatLoading.value = true;
+            try {
+              const result = await request("/api/chat/", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ query: question, collection_name: collectionName.value.trim() }),
+              });
+              answer.text = result.answer;
+              answer.sources = result.sources || [];
+              answer.tokens = result.tokens_used;
+              answer.duration = result.total_time_ms;
+              answer.pending = false;
+            } catch (error) {
+              answer.text = `请求失败：${error.message}`;
+              answer.pending = false;
+              answer.error = true;
+            } finally {
+              chatLoading.value = false;
+            }
+          }
+
+          function formatScore(score) {
+            const value = Number(score);
+            return Number.isFinite(value) ? value.toFixed(4) : score;
+          }
+
+          function selectFile(event) {
+            selectedFile.value = event.target.files && event.target.files[0] || null;
+            documentResult.value = null;
+          }
+
+          function dropFile(event) {
+            selectedFile.value = event.dataTransfer.files && event.dataTransfer.files[0] || null;
+            documentResult.value = null;
+          }
+
+          async function uploadDocument() {
+            if (!selectedFile.value || uploading.value) return;
+            const file = selectedFile.value;
+            if (file.size > 50 * 1024 * 1024) {
+              notify("文件超过 50 MB 限制，请选择较小的文件。", "error");
+              return;
+            }
+            uploading.value = true;
+            const form = new FormData();
+            form.append("file", file);
+            const params = new URLSearchParams();
+            if (storeDocument.value) params.set("collection_name", collectionName.value.trim());
+            try {
+              const result = await request(`/api/upload${params.size ? `?${params}` : ""}`, {
+                method: "POST",
+                body: form,
+              });
+              documentResult.value = {
+                title: "文档解析完成",
+                stats: {
+                  fileName: result.file_name,
+                  chunks: result.doc_count,
+                  stored: result.stored,
+                },
+                chunks: [],
+              };
+              notify(result.stored
+                ? `上传成功，已将 ${result.doc_count} 个片段保存到「${collectionName.value}」。`
+                : `上传并解析成功，共识别 ${result.doc_count} 个片段（未保存到知识库）。`);
+              selectedFile.value = null;
+              document.getElementById("file-picker").value = "";
+            } catch (error) {
+              notify(`上传失败：${error.message}`, "error");
+            } finally {
+              uploading.value = false;
+            }
+          }
+
+          async function parsePath() {
+            if (!filePath.value || parsingPath.value) return;
+            parsingPath.value = true;
+            try {
+              const result = await request("/api/parse-path", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ file_path: filePath.value }),
+              });
+              documentResult.value = {
+                title: result.msg || "文件解析完成",
+                stats: {
+                  fileName: result.file_name,
+                  pages: result.total_pages,
+                  chunks: result.total_chunks,
+                  tables: result.table_count,
+                },
+                chunks: result.chunks || [],
+              };
+              notify("文件解析成功。");
+            } catch (error) {
+              notify(`解析失败：${error.message}`, "error");
+            } finally {
+              parsingPath.value = false;
+            }
+          }
+
+          onMounted(() => {
+            checkHealth();
+            loadFormats();
+            loadCollections();
+          });
+
+          return {
+            activePage, collectionName, collections, creatingCollection,
+            newCollectionName, creatingCollectionLoading, query, messages, chatLoading,
+            healthState, healthLabel, formats, acceptedFormats,
+            selectedFile, storeDocument, uploading, filePath, parsingPath,
+            documentResult, toast, useSuggestion, ask, formatScore,
+            selectFile, uploadDocument, parsePath,
+            dropFile,
+            handleCollectionChange, createCollection,
+          };
+        },
+      }).mount("#app");
+    </script>
+  </body>
+</html>
